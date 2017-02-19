@@ -14,7 +14,7 @@ using Microsoft.Owin.Security;
 using Owin.Security.Providers.DeviantArt;
 using Owin.Security;
 using Owin;
-using Net4._5.Models;
+using Net4.Models;
 
 namespace Net4._5.Controllers
 {
@@ -44,24 +44,65 @@ namespace Net4._5.Controllers
         }
 
         //
-        // GET: /Account/Callback
-        [AllowAnonymous]
-        public async Task<ActionResult> Callback(string code)
+        // GET: /Account/Logout
+        public ActionResult Logout()
         {
-            this.ControllerContext.HttpContext.GetOwinContext().Authentication.SignIn();
-            var result = this.ControllerContext.HttpContext.GetOwinContext().Authentication.GetExternalLoginInfo();
-            var result2 = this.ControllerContext.HttpContext.GetOwinContext().Authentication.GetExternalIdentity("DeviantArt");
-            var result3 = this.ControllerContext.HttpContext.GetOwinContext().Environment;
-            var result4 = this.ControllerContext.HttpContext.GetOwinContext().Request;
-            var result6 = this.HttpContext;
-            var result7 = this.ControllerContext;
-            var result5 = this.ControllerContext.HttpContext.GetOwinContext().Authentication.User;
-            var result9 = await this.ControllerContext.HttpContext.GetOwinContext().Authentication.AuthenticateAsync("DeviantArt");
-
-            return null;
+            this.HttpContext.GetOwinContext().Authentication.SignOut(DefaultAuthenticationTypes.ApplicationCookie);
+            return RedirectToAction("Index", "Home");
         }
 
-        private class ChallengeResult: HttpUnauthorizedResult
+        //
+        // GET: /Account/Callback
+        [AllowAnonymous]
+        public async Task<ActionResult> Callback()
+        {
+            IAuthenticationManager authenticationManager = this.HttpContext.GetOwinContext().Authentication;
+            AuthenticateResult authenticateResult = await authenticationManager.AuthenticateAsync("ExternalCookie");
+
+            if (authenticateResult != null)
+            {
+                var claims = authenticateResult.Identity.Claims;
+                string userId = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.NameIdentifier).Value;
+                string userName = claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Name).Value;
+                string accessToken = claims.FirstOrDefault(claim => claim.Type == "urn:DeviantArt:access_token").Value;
+
+                ApplicationUser user = await UserManager.FindByIdAsync(userId);
+                if (user == null)
+                {
+                    UserManager.Create(new ApplicationUser()
+                    {
+                        Id = userId,
+                        UserName = userName,
+                        AccessToken = accessToken
+                    });
+                }
+                else
+                {
+                    user.AccessToken = accessToken;
+                    user.UserName = userName;
+
+                    UserManager.Update(user);
+                }
+
+                ExternalLoginInfo userInfo = await authenticationManager.GetExternalLoginInfoAsync();
+
+                authenticationManager.SignOut(DefaultAuthenticationTypes.ExternalCookie);
+
+                await UserManager.AddLoginAsync(userId, userInfo.Login);
+
+                ClaimsIdentity identity = await user.GenerateUserIdentityAsync(UserManager);
+                authenticationManager.SignIn(
+                    new AuthenticationProperties()
+                    {
+                        IsPersistent = true
+                    },
+                    identity);
+            }
+
+            return RedirectToAction("Index", "Home");
+        }
+
+        private class ChallengeResult : HttpUnauthorizedResult
         {
             public ChallengeResult(string redirectUri)
             {

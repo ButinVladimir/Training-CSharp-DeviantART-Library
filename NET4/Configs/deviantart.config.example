@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appSettings>
+  <add key="deviantART:clientId" value="Your id" />
+  <add key="deviantART:clientSecret" value="Your secret" />
+  <add key="deviantART:redirectURI" value="http://localhost:62150/Account/Callback" />
+</appSettings>
